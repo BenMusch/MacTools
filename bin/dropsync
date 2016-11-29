@@ -4,116 +4,76 @@ require 'yaml'
 require 'fileutils'
 require 'pathname'
 
-def prompt(text) print "#{text} "; gets.strip; end
-def promptn(text) print "#{text}\n"; gets.strip; end
+USER_HOME = ENV['HOME']
+DROPBOX_BASE = USER_HOME + '/Dropbox'
+
+# # # # # # # # # # # # # # # # # # #
+# Utility functions
+# # # # # # # # # # # # # # # # # # #
+
+# Prompt text and other modes:
+# :nl - Add a newline before prompt
+def ask(text, *mode)
+  extra=''
+  extra = "\n" if mode.include?(:nl)
+  print "#{text}#{extra}"
+  gets.strip
+end
+
+# Prompt to ask if we want to continue
 def continue?
   print "Continue? [yN]: "
   exit 1 if gets.strip != 'y'
 end
 
-# Parse dropbox info json to get the Dropbox base path
-def get_dropbox_path(home)
-  path = "#{home}/.dropbox/info.json"
-  JSON.parse(File.read(path))['personal']['path']
-rescue
-  nil
+# # # # # # # # # # # # # # # # # # #
+# Path functions
+# # # # # # # # # # # # # # # # # # #
+
+# Home path
+def h(*paths)
+  ([USER_HOME] + paths).join('/')
 end
 
-# Parse include paths entered
-def parse_include_paths(paths)
-  paths.split(',')
-    .map { |path| path.strip }
-    .select do |path|
-      if path[0, 1] != '.'
-        prompt("'#{path}' is not a dotfile, still include it? [yN]: ") == 'y'
-      else
-        true
-      end
+# Dropbox path
+def d(*paths)
+  ([DROPBOX_BASE] + paths).join('/')
+end
+
+def find(path)
+  return path if File.exist? path
+  return h(path) if File.exist? h(path)
+end
+
+def status(path)
+end
+
+def try(path, notexist = nil)
+  file = nil
+  to_raise = false
+
+  if !File.exist? path
+    case notexist
+    when :create ;  file = File.new(path, 'w+')
+    when :null   ;  file = nil
+    when :ignore ;  return
     end
-end
-
-# Important file paths
-USER_HOME = ENV['HOME'] || prompt('Enter your home path:')
-DROPBOX_BASE = get_dropbox_path(USER_HOME) || prompt('Enter your dropbox base:')
-DROPSYNC_CONFIG = USER_HOME + '/.dropsync'
-
-# Creating a config file if it doesn't exist
-if !File.exist? DROPSYNC_CONFIG
-  puts "You are configuring dropsync for the first time ..."
-  inclu = promptn("Files you want to include (i.e .vimrc, .tmux.conf, .zshrc):")
-  files = parse_include_paths(inclu)
-  puts "\n"
-  puts "You will be syncing the following files to #{DROPBOX_BASE}/.sync"
-  File.open(DROPSYNC_CONFIG, 'w') { |file| file.write(YAML::dump(files)) }
-end
-
-# Reading what to sync from the config file
-sync = YAML.load_file(DROPSYNC_CONFIG)
-
-# Checking if the process for dropbox is alive
-begin
-  pid = File.read("#{USER_HOME}/.dropbox/dropbox.pid").to_i
-  Process.getpgid(pid)
-rescue Errno::ENOENT, Errno::ESRCH
-  puts "Please make sure dropbox is installed and started"
-  exit 1
-end
-
-def link_files(df)
-  dropbox = "#{DROPBOX_BASE}/.sync/#{df}"
-  home = "#{USER_HOME}/#{df}"
-  FileUtils.ln_s(dropbox, home)
-end
-
-# If the dotfile does not exist on either local or dropbox
-def handle_neither_exist(df)
-  puts "#{df} not found locally or on dropsync."
-  puts "We are creating one for you ..."
-  folder = prompt("Is it a folder? [y/N]: ") == 'y'
-  if folder
-    Dir.mkdir("#{DROPBOX_BASE}/.sync/#{df}")
   else
-    File.open("#{DROPBOX_BASE}/.sync/#{df}", "w") {}
+    file = File.open(path, 'r+')
   end
-  link_files(df)
+
+  raise "File #{path} does not exist" if to_raise
+  yield(file) if !to_raise
+  file.close if file
 end
 
-def handle_local_exist(df)
-  puts "#{df} found locally but not on dropsync."
-  puts "Using local dotfile as dropsync ..."
-  continue?
-  dropbox = "#{DROPBOX_BASE}/.sync/#{df}"
-  home = "#{USER_HOME}/#{df}"
-  FileUtils.mv(home, dropbox)
-  link_files(df)
-end
+# # # # # # # # # # # # # # # # # # #
+# Main section
+# # # # # # # # # # # # # # # # # # #
 
-def handle_local_symlink(df)
-  home = Pathname.new("#{USER_HOME}/#{df}").realpath.to_s
-  if home != "#{DROPBOX_BASE}/.sync/#{df}"
-    puts "#{df} found locally but is symlinked to #{home} instead"
-    puts "Using dropsync version instead ..."
-    FileUtils.rm_rf("#{USER_HOME}/#{df}")
-    link_files(df)
+try h('.dropsync'), :create do |file|
+  config = YAML.load(file.read)
+  config.each do |path|
+    puts find(path)
   end
-end
-
-def handle_both_exist(df)
-  puts "#{df} found both locally and on dropsync."
-  puts "Using dropsync version ..."
-  continue?
-  FileUtils.rm_rf("#{USER_HOME}/#{df}")
-  link_files(df)
-end
-
-FileUtils.mkdir_p("#{DROPBOX_BASE}/.sync")
-sync.each do |df|
-  dropbox_exist = File.exist? "#{DROPBOX_BASE}/.sync/#{df}"
-  local_exist = File.exist? "#{USER_HOME}/#{df}"
-  local_symlink = File.symlink? "#{USER_HOME}/#{df}"
-  if !local_exist && !dropbox_exist then handle_neither_exist(df)
-  elsif local_exist && !dropbox_exist then handle_local_exist(df)
-  elsif local_symlink then handle_local_symlink(df)
-  elsif local_exist && dropbox_exist then handle_both_exist(df)
-  else link_files(df) end
 end
