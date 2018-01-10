@@ -10,17 +10,13 @@ brew 'openssl'
 brew 'readline'
 brew 'sqlite'
 brew 'tmux'
-brew 'vim'
+brew 'nvim'
 brew 'watch'
-
-# Ruby
-brew 'ruby-build'
-brew 'rbenv'
+brew 'postgresql'
 
 # Python
 brew 'python'
-brew 'pyenv'
-brew 'pyenv-virtualenv'
+brew 'python3'
 
 # Jvm
 brew 'maven'
@@ -31,6 +27,8 @@ brew 'elixir'
 
 # Go
 brew 'go'
+
+# Postgres
 
 # Platform
 brew 'openshift-cli'
@@ -45,12 +43,10 @@ cask 'flux'
 cask 'karabiner-elements'
 cask 'intellij-idea-ce'
 cask 'iterm2'
-cask 'pycharm-ce'
 cask 'spotify'
-cask 'sequel-pro'
-cask 'visualvm'
-cask 'virtualbox'
 cask 'yourkit-java-profiler'
+cask 'discord'
+cask 'vlc'
 
 # Kubernetes
 brew 'kubectl'
